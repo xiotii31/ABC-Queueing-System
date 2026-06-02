@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ABC Queueing System — Kiosk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green:      #10B981;
+    --green-dark: #059669;
+    --green-glow: rgba(16,185,129,0.35);
+    --amber:      #F59E0B;
+    --amber-glow: rgba(245,158,11,0.35);
+    --blue:       #3B82F6;
+    --blue-glow:  rgba(59,130,246,0.35);
+    --purple:     #8B5CF6;
+    --purple-glow:rgba(139,92,246,0.35);
+    --glass-bg:   rgba(255,255,255,0.07);
+    --glass-border: rgba(255,255,255,0.15);
+    --glass-blur: blur(20px);
+  }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: #0a0f1e;
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: none;
+  }
+
+  /* Animated background blobs */
+  .bg-blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.25;
+    animation: blobFloat 8s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .blob1 { width: 600px; height: 600px; background: #10B981; top: -200px; left: -200px; animation-delay: 0s; }
+  .blob2 { width: 500px; height: 500px; background: #3B82F6; bottom: -150px; right: -150px; animation-delay: -3s; }
+  .blob3 { width: 400px; height: 400px; background: #8B5CF6; top: 40%; left: 50%; animation-delay: -6s; }
+
+  @keyframes blobFloat {
+    0%, 100% { transform: translate(0,0) scale(1); }
+    33%       { transform: translate(30px,-30px) scale(1.05); }
+    66%       { transform: translate(-20px,20px) scale(0.97); }
+  }
+
+  /* Noise texture overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.4;
+    z-index: 0;
+  }
+
+  /* Main card */
+  .kiosk-card {
+    position: relative;
+    z-index: 10;
+    width: 680px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 32px;
+    padding: 48px 52px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    animation: cardIn 0.8s cubic-bezier(0.22,1,0.36,1) forwards;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(32px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 40px; }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 99px;
+    padding: 6px 16px;
+    margin-bottom: 18px;
+  }
+  .badge-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+  .header-badge span { color: var(--green); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .header h1 { font-family: 'DM Serif Display', serif; font-size: 36px; color: #fff; line-height: 1.1; margin-bottom: 6px; }
+  .header p  { color: rgba(255,255,255,0.45); font-size: 14px; font-weight: 300; letter-spacing: 0.02em; }
+
+  /* Divider */
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--glass-border), transparent); margin: 28px 0; }
+
+  /* Screen management */
+  .screen { display: none; animation: fadeSlideIn 0.4s ease forwards; }
+  .screen.active { display: block; }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── SCREEN 1: Select type ── */
+  .screen-label { color: rgba(255,255,255,0.5); font-size: 13px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 20px; text-align: center; }
+
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 0; }
+
+  .type-btn {
+    position: relative;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 28px 16px 24px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.25s ease;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+  }
+  .type-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .type-btn.priority::before { background: radial-gradient(circle at 50% 0%, var(--amber-glow), transparent 70%); }
+  .type-btn.regular::before  { background: radial-gradient(circle at 50% 0%, var(--green-glow), transparent 70%); }
+  .type-btn.followup::before { background: radial-gradient(circle at 50% 0%, var(--purple-glow), transparent 70%); }
+
+  .type-btn:hover::before, .type-btn:focus::before { opacity: 1; }
+  .type-btn:hover, .type-btn:focus {
+    transform: translateY(-4px);
+    border-color: rgba(255,255,255,0.25);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  }
+  .type-btn.priority:hover, .type-btn.priority:focus { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 20px 40px rgba(0,0,0,0.3); }
+  .type-btn.regular:hover,  .type-btn.regular:focus  { border-color: var(--green);  box-shadow: 0 0 0 1px var(--green),  0 20px 40px rgba(0,0,0,0.3); }
+  .type-btn.followup:hover, .type-btn.followup:focus { border-color: var(--purple); box-shadow: 0 0 0 1px var(--purple), 0 20px 40px rgba(0,0,0,0.3); }
+  .type-btn:active { transform: translateY(-1px) scale(0.98); }
+
+  .type-icon {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+    font-size: 28px;
+  }
+  .priority .type-icon  { background: rgba(245,158,11,0.15); }
+  .regular .type-icon   { background: rgba(16,185,129,0.15); }
+  .followup .type-icon  { background: rgba(139,92,246,0.15); }
+
+  .type-name { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .type-desc { font-size: 11px; color: rgba(255,255,255,0.4); line-height: 1.4; }
+
+  .priority .type-name  { color: var(--amber); }
+  .regular .type-name   { color: var(--green); }
+  .followup .type-name  { color: var(--purple); }
+
+  /* ── SCREEN 2: Confirm ── */
+  .confirm-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 32px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .confirm-type-badge {
+    display: inline-block;
+    padding: 6px 18px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .confirm-q { font-size: 18px; color: rgba(255,255,255,0.75); font-weight: 400; line-height: 1.5; }
+  .confirm-q strong { color: #fff; font-weight: 600; }
+
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .btn {
+    padding: 16px;
+    border-radius: 14px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-ghost {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.6);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: #fff;
+    box-shadow: 0 8px 24px var(--green-glow);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px var(--green-glow); }
+  .btn-primary:active { transform: translateY(0); }
+
+  /* ── SCREEN 3: Ticket ── */
+  .ticket-wrap { text-align: center; }
+  .ticket-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 40px 32px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ticket-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 24px 24px 0 0;
+  }
+  .ticket-card.priority::before  { background: linear-gradient(90deg, var(--amber), #FCD34D); }
+  .ticket-card.regular::before   { background: linear-gradient(90deg, var(--green), #34D399); }
+  .ticket-card.followup::before  { background: linear-gradient(90deg, var(--purple), #A78BFA); }
+
+  .ticket-label { font-size: 12px; color: rgba(255,255,255,0.4); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 10px; }
+  .ticket-number {
+    font-family: 'DM Serif Display', serif;
+    font-size: 96px;
+    line-height: 1;
+    margin-bottom: 8px;
+    animation: ticketPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+  @keyframes ticketPop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .ticket-number.priority  { color: var(--amber); text-shadow: 0 0 60px var(--amber-glow); }
+  .ticket-number.regular   { color: var(--green); text-shadow: 0 0 60px var(--green-glow); }
+  .ticket-number.followup  { color: var(--purple); text-shadow: 0 0 60px var(--purple-glow); }
+
+  .ticket-type-name { font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 20px; }
+  .ticket-instruction {
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.6;
+  }
+
+  .countdown-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .countdown-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    border-radius: 99px;
+    transition: width 1s linear;
+  }
+  .countdown-text { font-size: 12px; color: rgba(255,255,255,0.35); text-align: center; }
+
+  /* Footer */
+  .footer-info {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    text-align: center;
+  }
+  .footer-info p { color: rgba(255,255,255,0.2); font-size: 12px; letter-spacing: 0.05em; }
+
+  /* Loading overlay */
+  .loading-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(10,15,30,0.7);
+    backdrop-filter: blur(8px);
+    border-radius: 32px;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay p { color: rgba(255,255,255,0.6); font-size: 14px; }
+
+  /* Error toast */
+  .toast {
+    position: fixed;
+    top: 24px; left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(239,68,68,0.15);
+    border: 1px solid rgba(239,68,68,0.4);
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 12px 24px;
+    color: #FCA5A5;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 999;
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- Background blobs -->
+<div class="bg-blob blob1"></div>
+<div class="bg-blob blob2"></div>
+<div class="bg-blob blob3"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Main kiosk card -->
+<div class="kiosk-card" id="kioskCard">
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <p>Generating your ticket…</p>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">
+      <div class="badge-dot"></div>
+      <span>System Online</span>
+    </div>
+    <h1>Animal Bite Center</h1>
+    <p>City Health Office Davao — Queue Registration</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- SCREEN 1: Select type -->
+  <div class="screen active" id="screen1">
+    <p class="screen-label">Select your patient type to begin</p>
+    <div class="type-grid">
+      <button class="type-btn priority" onclick="selectType('priority')" aria-label="Priority patient">
+        <div class="type-icon">⭐</div>
+        <div class="type-name">Priority</div>
+        <div class="type-desc">Senior Citizen<br>PWD / Pregnant</div>
+      </button>
+      <button class="type-btn regular" onclick="selectType('regular')" aria-label="Regular patient">
+        <div class="type-icon">🩹</div>
+        <div class="type-name">Regular</div>
+        <div class="type-desc">1st Consultation<br>New Patient</div>
+      </button>
+      <button class="type-btn followup" onclick="selectType('followup')" aria-label="Follow-up patient">
+        <div class="type-icon">💉</div>
+        <div class="type-name">Follow-up</div>
+        <div class="type-desc">2nd / 3rd Dose<br>Returning Patient</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: Confirm -->
+  <div class="screen" id="screen2">
+    <p class="screen-label">Please confirm your selection</p>
+    <div class="confirm-box">
+      <div class="confirm-type-badge" id="confirmBadge"></div>
+      <p class="confirm-q" id="confirmText"></p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goBack()">← Go back</button>
+      <button class="btn btn-primary" onclick="confirmAndRegister()">Confirm & Get Ticket →</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: Ticket -->
+  <div class="screen" id="screen3">
+    <div class="ticket-wrap">
+      <div class="ticket-card" id="ticketCard">
+        <div class="ticket-label">Your Queue Number</div>
+        <div class="ticket-number" id="ticketNumber">—</div>
+        <div class="ticket-type-name" id="ticketTypeName">—</div>
+        <div class="ticket-instruction" id="ticketInstruction">—</div>
+      </div>
+      <div class="countdown-bar">
+        <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
+      </div>
+      <p class="countdown-text" id="countdownText">Returning to start in 12s…</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer-info">
+  <p>Animal Bite Center · City Health Office Davao · Kiosk v1.0</p>
+</div>
+
+<script>
+const API_BASE = '../api';
+
+const typeConfig = {
+  priority: {
+    name: 'Priority Patient',
+    desc: 'Senior Citizen / PWD / Pregnant',
+    badgeStyle: 'background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#F59E0B;',
+    instruction: 'A staff member will assist you. Please wait at the priority seating area near the entrance.',
+  },
+  regular: {
+    name: 'Regular Patient',
+    desc: '1st Consultation',
+    badgeStyle: 'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#10B981;',
+    instruction: 'Please take a seat and wait for your number to be called on the TV screen. A staff member will guide you next.',
+  },
+  followup: {
+    name: 'Follow-up Patient',
+    desc: '2nd / 3rd Dose',
+    badgeStyle: 'background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.4);color:#8B5CF6;',
+    instruction: 'Please proceed to the encoder\'s counter with your vaccination card. You will be called for your dose shortly.',
+  },
+};
+
+let selectedType = null;
+let countdownTimer = null;
+let countdownSeconds = 12;
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.add('active');
+}
+
+function selectType(type) {
+  selectedType = type;
+  const cfg = typeConfig[type];
+  const badge = document.getElementById('confirmBadge');
+  badge.textContent = cfg.name;
+  badge.setAttribute('style', cfg.badgeStyle + ' font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;border-radius:99px;padding:5px 16px;display:inline-block;margin-bottom:14px;');
+  document.getElementById('confirmText').innerHTML =
+    `Are you a <strong>${cfg.desc}</strong> patient?<br><span style="font-size:13px;opacity:0.6">Please confirm so we can assign you the correct queue number.</span>`;
+  showScreen('screen2');
+}
+
+function goBack() { showScreen('screen1'); selectedType = null; }
+
+async function confirmAndRegister() {
+  if (!selectedType) return;
+  document.getElementById('loadingOverlay').classList.add('show');
+
+  try {
+    const res  = await fetch(`${API_BASE}/register.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: selectedType }),
+    });
+    const data = await res.json();
+    document.getElementById('loadingOverlay').classList.remove('show');
+
+    if (!data.success) { showToast(data.error || 'Registration failed.'); return; }
+
+    renderTicket(data.ticket_number, selectedType, data.position);
+    showScreen('screen3');
+    startCountdown();
+
+  } catch (e) {
+    document.getElementById('loadingOverlay').classList.remove('show');
+    showToast('Network error. Please try again.');
+  }
+}
+
+function renderTicket(number, type, position) {
+  const cfg   = typeConfig[type];
+  const card  = document.getElementById('ticketCard');
+  const numEl = document.getElementById('ticketNumber');
+
+  card.className = `ticket-card ${type}`;
+  numEl.className = `ticket-number ${type}`;
+  numEl.textContent = number;
+  document.getElementById('ticketTypeName').textContent = cfg.name + ' · ' + cfg.desc;
+  document.getElementById('ticketInstruction').textContent = cfg.instruction;
+}
+
+function startCountdown() {
+  clearInterval(countdownTimer);
+  countdownSeconds = 12;
+  updateCountdown();
+  countdownTimer = setInterval(() => {
+    countdownSeconds--;
+    updateCountdown();
+    if (countdownSeconds <= 0) {
+      clearInterval(countdownTimer);
+      resetKiosk();
+    }
+  }, 1000);
+}
+
+function updateCountdown() {
+  const pct = (countdownSeconds / 12) * 100;
+  document.getElementById('countdownFill').style.width = pct + '%';
+  document.getElementById('countdownText').textContent = `Returning to start in ${countdownSeconds}s…`;
+}
+
+function resetKiosk() {
+  clearInterval(countdownTimer);
+  selectedType = null;
+  showScreen('screen1');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

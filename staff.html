@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC System — Staff Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green:      #10B981;
+    --green-dark: #059669;
+    --green-glow: rgba(16,185,129,0.25);
+    --amber:      #F59E0B;
+    --amber-glow: rgba(245,158,11,0.25);
+    --blue:       #3B82F6;
+    --blue-glow:  rgba(59,130,246,0.25);
+    --purple:     #8B5CF6;
+    --purple-glow:rgba(139,92,246,0.25);
+    --red:        #EF4444;
+    --glass-bg:   rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.12);
+    --card-bg:    rgba(255,255,255,0.04);
+  }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: #060d1a;
+    min-height: 100vh;
+    color: #fff;
+    overflow-x: hidden;
+  }
+
+  /* Background */
+  .bg-blob { position: fixed; border-radius: 50%; filter: blur(100px); opacity: 0.15; pointer-events: none; }
+  .blob1 { width: 700px; height: 700px; background: #10B981; top: -300px; left: -200px; }
+  .blob2 { width: 500px; height: 500px; background: #3B82F6; bottom: -200px; right: -100px; }
+
+  /* Layout */
+  .page { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* Topbar */
+  .topbar {
+    background: rgba(6,13,26,0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 0 32px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-logo { font-family: 'DM Serif Display', serif; font-size: 20px; color: #fff; }
+  .topbar-sub  { font-size: 12px; color: rgba(255,255,255,0.35); }
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+  .status-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; display: inline-block; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .topbar-clock { font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.85); }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--glass-border);
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .stat-cell {
+    background: rgba(6,13,26,0.6);
+    padding: 14px 20px;
+    text-align: center;
+  }
+  .stat-val { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat-lbl { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .stat-val.amber  { color: var(--amber); }
+  .stat-val.green  { color: var(--green); }
+  .stat-val.purple { color: var(--purple); }
+  .stat-val.blue   { color: var(--blue); }
+  .stat-val.white  { color: #fff; }
+
+  /* Main grid */
+  .main { display: grid; grid-template-columns: 1fr 380px; gap: 0; flex: 1; }
+
+  /* Left: Queue panel */
+  .queue-panel { padding: 24px 28px; border-right: 1px solid var(--glass-border); overflow-y: auto; max-height: calc(100vh - 128px); }
+
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .panel-title { font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.85); }
+  .panel-actions { display: flex; gap: 10px; }
+
+  /* Call Next Button */
+  .btn-call {
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    border: none;
+    border-radius: 12px;
+    padding: 10px 20px;
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 20px var(--green-glow);
+    transition: all 0.2s;
+  }
+  .btn-call:hover { transform: translateY(-2px); box-shadow: 0 8px 28px var(--green-glow); }
+  .btn-call:active { transform: translateY(0); }
+  .btn-call:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-reset {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 12px;
+    padding: 10px 16px;
+    color: rgba(239,68,68,0.8);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-reset:hover { background: rgba(239,68,68,0.2); }
+
+  /* Inside counter pill */
+  .inside-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 99px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+  }
+  .inside-pill strong { color: #fff; }
+  .inside-pill.full strong { color: var(--red); }
+
+  /* Queue list */
+  .queue-section { margin-bottom: 24px; }
+  .section-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .section-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-amber  { background: var(--amber); }
+  .dot-green  { background: var(--green); }
+  .dot-purple { background: var(--purple); }
+
+  /* Queue row */
+  .q-row {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+    animation: rowIn 0.3s ease forwards;
+  }
+  @keyframes rowIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  .q-row.called {
+    border-color: rgba(16,185,129,0.4);
+    background: rgba(16,185,129,0.06);
+  }
+  .q-row.cat3 {
+    border-color: rgba(239,68,68,0.4);
+    background: rgba(239,68,68,0.05);
+  }
+
+  .q-ticket {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    min-width: 60px;
+    font-variant-numeric: tabular-nums;
+  }
+  .q-ticket.priority { color: var(--amber); }
+  .q-ticket.regular  { color: var(--green); }
+  .q-ticket.followup { color: var(--purple); }
+
+  .q-info { flex: 1; min-width: 0; }
+  .q-type { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.75); }
+  .q-time { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; }
+
+  .q-status-badge {
+    font-size: 10px; font-weight: 600; padding: 3px 10px;
+    border-radius: 99px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge-waiting  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
+  .badge-called   { background: rgba(16,185,129,0.15); color: var(--green); }
+  .badge-cat3     { background: rgba(239,68,68,0.15); color: var(--red); }
+
+  .q-actions { display: flex; gap: 6px; }
+  .q-btn {
+    font-size: 11px; padding: 5px 10px; border-radius: 8px;
+    border: 1px solid; cursor: pointer; font-family: 'Outfit', sans-serif;
+    font-weight: 600; transition: all 0.15s; white-space: nowrap;
+  }
+  .q-btn-done { border-color: rgba(16,185,129,0.4); color: var(--green); background: rgba(16,185,129,0.08); }
+  .q-btn-done:hover { background: rgba(16,185,129,0.2); }
+  .q-btn-skip { border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.35); background: transparent; }
+  .q-btn-skip:hover { border-color: rgba(239,68,68,0.4); color: var(--red); }
+  .q-btn-sev {
+    font-size: 10px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.35);
+    background: transparent; cursor: pointer; font-family: 'Outfit', sans-serif;
+  }
+  .q-btn-sev:hover { border-color: rgba(239,68,68,0.5); color: var(--red); }
+
+  .empty-state {
+    text-align: center; padding: 40px 20px;
+    color: rgba(255,255,255,0.2); font-size: 14px;
+  }
+  .empty-state div { font-size: 32px; margin-bottom: 8px; }
+
+  /* Right: Now Serving panel */
+  .serving-panel {
+    padding: 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 128px);
+  }
+
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px;
+    padding: 24px;
+  }
+
+  .now-serving-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(255,255,255,0.35); margin-bottom: 16px;
+  }
+  .now-serving-number {
+    font-family: 'DM Serif Display', serif;
+    font-size: 72px;
+    line-height: 1;
+    text-align: center;
+    margin: 8px 0 4px;
+  }
+  .now-serving-number.priority { color: var(--amber); text-shadow: 0 0 40px var(--amber-glow); }
+  .now-serving-number.regular  { color: var(--green);  text-shadow: 0 0 40px var(--green-glow); }
+  .now-serving-number.followup { color: var(--purple); text-shadow: 0 0 40px var(--purple-glow); }
+  .now-serving-number.empty    { color: rgba(255,255,255,0.15); font-size: 40px; }
+
+  .now-serving-type { text-align: center; font-size: 13px; color: rgba(255,255,255,0.45); margin-bottom: 8px; }
+
+  /* Severity selector */
+  .sev-title { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 10px; font-weight: 500; }
+  .sev-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .sev-btn {
+    padding: 10px 6px; border-radius: 10px; border: 1px solid;
+    font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 600;
+    cursor: pointer; text-align: center; transition: all 0.2s;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .sev-cat1 { border-color: rgba(16,185,129,0.3); color: var(--green); background: rgba(16,185,129,0.06); }
+  .sev-cat1:hover, .sev-cat1.active { background: rgba(16,185,129,0.2); border-color: var(--green); }
+  .sev-cat2 { border-color: rgba(245,158,11,0.3); color: var(--amber); background: rgba(245,158,11,0.06); }
+  .sev-cat2:hover, .sev-cat2.active { background: rgba(245,158,11,0.2); border-color: var(--amber); }
+  .sev-cat3 { border-color: rgba(239,68,68,0.3); color: var(--red); background: rgba(239,68,68,0.06); }
+  .sev-cat3:hover, .sev-cat3.active { background: rgba(239,68,68,0.2); border-color: var(--red); }
+  .sev-desc { font-size: 10px; opacity: 0.7; margin-top: 3px; font-weight: 400; }
+
+  /* Activity log */
+  .log-title { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 12px; }
+  .log-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+  .log-item:last-child { border-bottom: none; }
+  .log-action { font-weight: 600; min-width: 54px; }
+  .log-ticket { font-family: 'DM Serif Display', serif; font-size: 14px; }
+  .log-time   { color: rgba(255,255,255,0.3); margin-left: auto; font-size: 11px; }
+  .log-registered { color: var(--blue); }
+  .log-called     { color: var(--green); }
+  .log-done       { color: rgba(255,255,255,0.4); }
+  .log-skipped    { color: var(--red); }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 80px; right: 24px;
+    padding: 12px 20px; border-radius: 12px;
+    font-size: 14px; font-weight: 500; z-index: 999;
+    transform: translateX(200px); opacity: 0;
+    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    backdrop-filter: blur(20px);
+  }
+  .toast.show { transform: translateX(0); opacity: 1; }
+  .toast.success { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); color: #6EE7B7; }
+  .toast.error   { background: rgba(239,68,68,0.15);  border: 1px solid rgba(239,68,68,0.4);  color: #FCA5A5; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* Severity modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+    z-index: 500; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-card {
+    background: #0d1a2e; border: 1px solid var(--glass-border);
+    border-radius: 20px; padding: 32px; min-width: 320px;
+    animation: cardIn 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+  @keyframes cardIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .modal-sub   { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 20px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .modal-cancel { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--glass-border); background: transparent; color: rgba(255,255,255,0.5); cursor: pointer; font-family: 'Outfit',sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="bg-blob blob1"></div>
+<div class="bg-blob blob2"></div>
+<div class="toast" id="toast"></div>
+
+<!-- Severity Modal -->
+<div class="modal-overlay" id="sevModal">
+  <div class="modal-card">
+    <div class="modal-title">Set Triage Severity</div>
+    <div class="modal-sub">Ticket: <span id="sevTicketLabel" style="font-family:'DM Serif Display',serif;color:#fff"></span></div>
+    <div class="sev-grid">
+      <button class="sev-btn sev-cat1" onclick="setSeverity('cat1')">Cat I<div class="sev-desc">Minor wound</div></button>
+      <button class="sev-btn sev-cat2" onclick="setSeverity('cat2')">Cat II<div class="sev-desc">Moderate</div></button>
+      <button class="sev-btn sev-cat3" onclick="setSeverity('cat3')">Cat III<div class="sev-desc">Severe — bump</div></button>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeSevModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="topbar-logo">ABC Queueing System</div>
+        <div class="topbar-sub">Staff Monitor · City Health Office Davao</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="status-dot"></span>
+      <span style="font-size:12px;color:rgba(255,255,255,0.35)">Live</span>
+      <div class="topbar-clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-cell"><div class="stat-val amber" id="statP">0</div><div class="stat-lbl">Priority waiting</div></div>
+    <div class="stat-cell"><div class="stat-val green" id="statR">0</div><div class="stat-lbl">Regular waiting</div></div>
+    <div class="stat-cell"><div class="stat-val purple" id="statF">0</div><div class="stat-lbl">Follow-up waiting</div></div>
+    <div class="stat-cell"><div class="stat-val blue" id="statInside">0</div><div class="stat-lbl">Inside (max 5)</div></div>
+    <div class="stat-cell"><div class="stat-val white" id="statServed">0</div><div class="stat-lbl">Served today</div></div>
+    <div class="stat-cell"><div class="stat-val white" id="statTotal">0</div><div class="stat-lbl">Total today</div></div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Left: Queue -->
+    <div class="queue-panel">
+      <div class="panel-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="panel-title">Queue List</span>
+          <span class="inside-pill" id="insidePill">Inside: <strong>0 / 5</strong></span>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-reset" onclick="confirmReset()">Reset Day</button>
+          <button class="btn-call" id="callBtn" onclick="callNext()">
+            <span>▶</span> Call Next
+          </button>
+        </div>
+      </div>
+
+      <!-- Priority section -->
+      <div class="queue-section">
+        <div class="section-label"><span class="section-dot dot-amber"></span>Priority — Senior / PWD / Pregnant</div>
+        <div id="listPriority"><div class="empty-state"><div>⭐</div>No priority patients</div></div>
+      </div>
+
+      <!-- Regular section -->
+      <div class="queue-section">
+        <div class="section-label"><span class="section-dot dot-green"></span>Regular — 1st Consultation</div>
+        <div id="listRegular"><div class="empty-state"><div>🩹</div>No regular patients</div></div>
+      </div>
+
+      <!-- Follow-up section -->
+      <div class="queue-section">
+        <div class="section-label"><span class="section-dot dot-purple"></span>Follow-up — 2nd / 3rd Dose</div>
+        <div id="listFollowup"><div class="empty-state"><div>💉</div>No follow-up patients</div></div>
+      </div>
+    </div>
+
+    <!-- Right: Serving + Log -->
+    <div class="serving-panel">
+      <!-- Now Serving -->
+      <div class="glass-card">
+        <div class="now-serving-label">Now Serving</div>
+        <div class="now-serving-number empty" id="nsNumber">—</div>
+        <div class="now-serving-type" id="nsType">Waiting for next patient</div>
+      </div>
+
+      <!-- Triage quick-set -->
+      <div class="glass-card">
+        <div class="sev-title">Quick Triage — Set Severity</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:10px">Click a patient row's severity button to update</div>
+        <div class="sev-grid">
+          <div style="text-align:center;padding:10px;border-radius:10px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2)">
+            <div style="color:var(--green);font-size:12px;font-weight:600">Cat I</div>
+            <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:2px">Minor wound<br>No immediate risk</div>
+          </div>
+          <div style="text-align:center;padding:10px;border-radius:10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2)">
+            <div style="color:var(--amber);font-size:12px;font-weight:600">Cat II</div>
+            <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:2px">Moderate wound<br>Needs attention</div>
+          </div>
+          <div style="text-align:center;padding:10px;border-radius:10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2)">
+            <div style="color:var(--red);font-size:12px;font-weight:600">Cat III</div>
+            <div style="color:rgba(255,255,255,0.35);font-size:10px;margin-top:2px">Severe wound<br>Bumped to front</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity log -->
+      <div class="glass-card" style="flex:1">
+        <div class="log-title">Activity Log</div>
+        <div id="activityLog"><div style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;padding:20px">No activity yet</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '../api';
+let sevTargetTicket = null;
+let activityLog = [];
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+}
+setInterval(updateClock, 1000); updateClock();
+
+// Fetch and render queue
+async function fetchQueue() {
+  try {
+    const res  = await fetch(`${API}/queue.php`);
+    const data = await res.json();
+    renderQueue(data);
+  } catch(e) { /* silently retry */ }
+}
+
+function renderQueue(data) {
+  // Stats
+  document.getElementById('statP').textContent = data.counts.priority;
+  document.getElementById('statR').textContent = data.counts.regular;
+  document.getElementById('statF').textContent = data.counts.followup;
+  document.getElementById('statInside').textContent = data.inside_count;
+  document.getElementById('statServed').textContent = data.total_served;
+  document.getElementById('statTotal').textContent = data.total_today;
+
+  // Inside pill
+  const pill = document.getElementById('insidePill');
+  pill.innerHTML = `Inside: <strong>${data.inside_count} / 5</strong>`;
+  pill.className = `inside-pill ${data.inside_count >= 5 ? 'full' : ''}`;
+
+  // Call button
+  const total = data.counts.priority + data.counts.regular + data.counts.followup;
+  document.getElementById('callBtn').disabled = (data.inside_count >= 5 || total === 0);
+
+  // Now serving
+  const ns = data.now_serving;
+  if (ns && ns.ticket_number) {
+    const nsNum = document.getElementById('nsNumber');
+    nsNum.textContent = ns.ticket_number;
+    nsNum.className = `now-serving-number ${ns.patient_type}`;
+    document.getElementById('nsType').textContent = typeLabel(ns.patient_type);
+  }
+
+  // Render queue sections
+  const priority = data.queue.filter(p => p.patient_type === 'priority');
+  const regular  = data.queue.filter(p => p.patient_type === 'regular');
+  const followup = data.queue.filter(p => p.patient_type === 'followup');
+
+  renderSection('listPriority', priority, '⭐', 'No priority patients');
+  renderSection('listRegular',  regular,  '🩹', 'No regular patients');
+  renderSection('listFollowup', followup, '💉', 'No follow-up patients');
+}
+
+function renderSection(elId, patients, icon, emptyMsg) {
+  const el = document.getElementById(elId);
+  if (!patients.length) {
+    el.innerHTML = `<div class="empty-state"><div>${icon}</div>${emptyMsg}</div>`;
+    return;
+  }
+  el.innerHTML = patients.map(p => {
+    const isCalled = p.status === 'called';
+    const isCat3   = p.severity === 'cat3';
+    const sevBadge = p.severity !== 'pending'
+      ? `<span class="q-status-badge ${isCat3 ? 'badge-cat3' : 'badge-waiting'}">${p.severity.toUpperCase()}</span>`
+      : '';
+    const doneBtn = isCalled
+      ? `<button class="q-btn q-btn-done" onclick="markDone('${p.ticket_number}')">✓ Done</button>` : '';
+    const skipBtn = `<button class="q-btn q-btn-skip" onclick="skipPatient('${p.ticket_number}')">Skip</button>`;
+    const sevBtn  = `<button class="q-btn-sev" onclick="openSevModal('${p.ticket_number}')">⚠ Sev</button>`;
+    const time = new Date(p.created_at).toLocaleTimeString('en-PH', {hour:'2-digit',minute:'2-digit'});
+    return `<div class="q-row ${isCalled?'called':''} ${isCat3?'cat3':''}">
+      <div class="q-ticket ${p.patient_type}">${p.ticket_number}</div>
+      <div class="q-info">
+        <div class="q-type">${typeLabel(p.patient_type)}</div>
+        <div class="q-time">Registered ${time}</div>
+      </div>
+      ${sevBadge}
+      ${sevBtn}
+      ${doneBtn}
+      ${skipBtn}
+    </div>`;
+  }).join('');
+}
+
+async function callNext() {
+  try {
+    const res  = await fetch(`${API}/queue.php`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'call_next'}) });
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    showToast(`Calling ${data.called}`, 'success');
+    addLog('called', data.called);
+    fetchQueue();
+  } catch(e) { showToast('Network error', 'error'); }
+}
+
+async function markDone(ticket) {
+  const res  = await fetch(`${API}/queue.php`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'mark_done', ticket_number: ticket}) });
+  const data = await res.json();
+  if (data.success) { showToast(`${ticket} marked done`, 'success'); addLog('done', ticket); fetchQueue(); }
+}
+
+async function skipPatient(ticket) {
+  if (!confirm(`Skip patient ${ticket}? They will be removed from the queue.`)) return;
+  const res  = await fetch(`${API}/queue.php`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'skip', ticket_number: ticket}) });
+  const data = await res.json();
+  if (data.success) { showToast(`${ticket} skipped`, 'error'); addLog('skipped', ticket); fetchQueue(); }
+}
+
+function openSevModal(ticket) {
+  sevTargetTicket = ticket;
+  document.getElementById('sevTicketLabel').textContent = ticket;
+  document.getElementById('sevModal').classList.add('show');
+}
+function closeSevModal() {
+  sevTargetTicket = null;
+  document.getElementById('sevModal').classList.remove('show');
+}
+async function setSeverity(sev) {
+  if (!sevTargetTicket) return;
+  await fetch(`${API}/queue.php`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'mark_severity', ticket_number: sevTargetTicket, severity: sev}) });
+  showToast(`Severity set: ${sevTargetTicket} → ${sev.toUpperCase()}`, 'success');
+  closeSevModal();
+  fetchQueue();
+}
+
+async function confirmReset() {
+  if (!confirm('Reset queue for new day? This will clear all active patients.')) return;
+  await fetch(`${API}/queue.php`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'reset_daily'}) });
+  showToast('Queue reset for new day', 'success');
+  activityLog = [];
+  document.getElementById('activityLog').innerHTML = '<div style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;padding:20px">No activity yet</div>';
+  fetchQueue();
+}
+
+function addLog(action, ticket) {
+  const time = new Date().toLocaleTimeString('en-PH', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  activityLog.unshift({action, ticket, time});
+  if (activityLog.length > 30) activityLog.pop();
+  const el = document.getElementById('activityLog');
+  el.innerHTML = activityLog.map(l =>
+    `<div class="log-item">
+      <span class="log-action log-${l.action}">${l.action}</span>
+      <span class="log-ticket">${l.ticket}</span>
+      <span class="log-time">${l.time}</span>
+    </div>`
+  ).join('');
+}
+
+function typeLabel(type) {
+  return { priority:'Priority — Senior/PWD/Pregnant', regular:'Regular — 1st Consultation', followup:'Follow-up — 2nd/3rd Dose' }[type] || type;
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Poll every 3 seconds
+fetchQueue();
+setInterval(fetchQueue, 3000);
+</script>
+</body>
+</html>
